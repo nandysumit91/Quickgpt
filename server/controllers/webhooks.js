@@ -7,14 +7,14 @@ export const stripeWebhooks = async (req, res) => {
   const sig = req.headers["stripe-signature"];
 
   let event;
+
   try {
     event = stripe.webhooks.constructEvent(
-      req.body, // must be raw body
+      req.body,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (error) {
-    console.error("Webhook signature verification failed:", error.message);
     return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
@@ -24,22 +24,27 @@ export const stripeWebhooks = async (req, res) => {
       const { transactionId, appId } = session.metadata || {};
 
       if (appId === "quickgpt") {
-        const transaction = await Transaction.findById(transactionId);
-        if (!transaction || transaction.isPaid) {
-          console.warn("Transaction not found or already paid");
-          return res.status(404).send("Transaction not found");
+        const transaction = await Transaction.findOne({
+          _id: transactionId,
+          isPaid: false,
+        });
+
+        if (!transaction) {
+          console.log("⚠️ Transaction not found or already paid");
+          return res.status(400).json({ message: "Transaction not found" });
         }
+
+        await User.updateOne(
+          { _id: transaction.userId },
+          { $inc: { credits: transaction.credits } }
+        );
 
         transaction.isPaid = true;
         await transaction.save();
 
-        const user = await User.findById(transaction.userId);
-        if (user) {
-          user.credits = (user.credits || 0) + transaction.credits;
-          await user.save();
-        }
-
-        console.log("✅ Transaction completed & credits added:", transactionId);
+        console.log("✅ Transaction updated:", transactionId);
+      } else {
+        return res.json({ received: true, message: "Ignored event: Invalid app" });
       }
     }
 

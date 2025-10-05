@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { assets } from '../assets/assets'
 import Message from './Message'
+import { messageAPI, chatAPI } from '../utils/api'
 
 const ChatBox = () => {
 
   const containerRef = useRef(null)
 
-  const {selectedChat, theme} = useAppContext()
+  const {selectedChat, theme, user, fetchUsersChats, setSelectedChat} = useAppContext()
 
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
@@ -17,10 +18,80 @@ const ChatBox = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault()
+    if (!prompt.trim() || loading) return;
+    
+    const userMessage = {
+      role: 'user',
+      content: prompt,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add user message to current messages
+    setMessages(prev => [...prev, userMessage]);
+    setLoading(true);
+    setPrompt('');
+    
+    try {
+      let response;
+      if (mode === 'text') {
+        response = await messageAPI.sendTextMessage({
+          prompt: prompt,
+          chatId: selectedChat?._id,
+          isPublished: false
+        });
+      } else {
+        response = await messageAPI.sendImageMessage({
+          prompt: prompt,
+          chatId: selectedChat?._id,
+          isPublished: isPublished
+        });
+      }
+      
+      if (response.success) {
+        // Add AI response to messages
+        const aiMessage = {
+          role: 'assistant',
+          content: response.message || response.imageUrl,
+          timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, aiMessage]);
+        
+        // Refresh chats to get updated chat with new messages
+        fetchUsersChats();
+      } else {
+        console.error('Failed to send message:', response.message);
+        // Remove user message if sending failed
+        setMessages(prev => prev.slice(0, -1));
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Remove user message if sending failed
+      setMessages(prev => prev.slice(0, -1));
+    } finally {
+      setLoading(false);
+    }
   }
+  // Create new chat if none exists
+  useEffect(() => {
+    const createInitialChat = async () => {
+      if (user && (!selectedChat || !selectedChat._id)) {
+        try {
+          const response = await chatAPI.createChat();
+          if (response.success) {
+            fetchUsersChats();
+          }
+        } catch (error) {
+          console.error('Failed to create initial chat:', error);
+        }
+      }
+    };
+    
+    createInitialChat();
+  }, [user, selectedChat, fetchUsersChats]);
+
   useEffect(()=>{
     if(selectedChat){
-      setMessages(selectedChat.messages)
+      setMessages(selectedChat.messages || [])
     }
   },[selectedChat])
 

@@ -2,6 +2,7 @@ import express from "express";
 import "dotenv/config";
 import cors from "cors";
 import connectDB from "./configs/db.js";
+import User from "./models/User.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import chatRouter from "./routes/chatRoutes.js";
@@ -12,21 +13,28 @@ import { stripeWebhooks } from "./controllers/webhooks.js";
 const app = express();
 await connectDB();
 
-// Stripe Webhook route — must be before express.json()
+// ================== Stripe Webhook ==================
 app.post(
-  "/api/webhook",
+  "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   stripeWebhooks
 );
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// JWT Helper
-const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
+app.use((req, res, next) => {
+  console.log("=== REQUEST ===");
+  console.log("URL:", req.url, "Method:", req.method);
+  next();
+});
 
-// Routes
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
+};
+
+app.get("/", (req, res) => res.send("Server is Live!"));
+
 app.use("/api/chat", chatRouter);
 app.use("/api/message", messageRouter);
 app.use("/api/credit", creditRouter);
@@ -34,13 +42,15 @@ app.use("/api/credit", creditRouter);
 app.post("/api/user/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ success: false, message: "Name, email, and password are required" });
+    if (!name || !email || !password)
+      return res.status(400).json({ success: false, message: "Name, email, and password are required" });
 
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ success: false, message: "User already exists" });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+
     const user = await User.create({ name, email, password: hashedPassword });
     const token = generateToken(user._id);
 
@@ -81,9 +91,9 @@ app.get("/api/user/data", async (req, res) => {
 
     res.json({ success: true, user: { id: user._id, name: user.name, email: user.email, credits: user.credits } });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.name === "JsonWebTokenError" ? 401 : 500).json({ success: false, message: error.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { dummyChats, dummyUserData } from "../assets/assets";
+import { authAPI, chatAPI, setAuthToken, removeAuthToken, isAuthenticated } from "../utils/api";
 
 
 const AppContext = createContext()
@@ -13,12 +13,41 @@ const [selectedChat , setSelectedChat] = useState(null);
 const [theme , setTheme] = useState(localStorage.getItem('theme') || 'light');
 
 const fetchUser = async () => {
-    setUser()
+    try {
+        if (isAuthenticated()) {
+            const response = await authAPI.getUserData();
+            if (response.success) {
+                setUser(response.user);
+            } else {
+                removeAuthToken();
+                setUser(null);
+            }
+        } else {
+            setUser(null);
+        }
+    } catch (error) {
+        console.error('Failed to fetch user:', error);
+        removeAuthToken();
+        setUser(null);
+    }
 }
 
 const fetchUsersChats = async () => {
-    setChats(dummyChats)
-    setSelectedChat(dummyChats[0])
+    try {
+        const response = await chatAPI.getChats();
+        if (response.success) {
+            setChats(response.chats || []);
+            if (response.chats && response.chats.length > 0) {
+                setSelectedChat(response.chats[0]);
+            } else {
+                setSelectedChat(null);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch chats:', error);
+        setChats([]);
+        setSelectedChat(null);
+    }
 }
 
 useEffect(()=>{
@@ -46,8 +75,48 @@ useEffect(()=>{
 },[])
 
 
+const login = async (credentials) => {
+    try {
+        const response = await authAPI.login(credentials);
+        if (response.success) {
+            setAuthToken(response.token);
+            setUser(response.user);
+            return { success: true };
+        }
+        return { success: false, message: response.message };
+    } catch (error) {
+        console.error('Login failed:', error);
+        return { success: false, message: error.message };
+    }
+};
+
+const register = async (userData) => {
+    try {
+        const response = await authAPI.register(userData);
+        if (response.success) {
+            setAuthToken(response.token);
+            setUser(response.user);
+            return { success: true };
+        }
+        return { success: false, message: response.message };
+    } catch (error) {
+        console.error('Registration failed:', error);
+        return { success: false, message: error.message };
+    }
+};
+
+const logout = () => {
+    removeAuthToken();
+    setUser(null);
+    setChats([]);
+    setSelectedChat(null);
+    navigate('/login');
+};
+
 const value = {
-    navigate, user, setUser, fetchUser, chats, setChats, selectedChat, setSelectedChat, theme, setTheme
+    navigate, user, setUser, fetchUser, login, register, logout,
+    chats, setChats, selectedChat, setSelectedChat, fetchUsersChats,
+    theme, setTheme
 }
     return (
     <AppContext.Provider value = {value}>

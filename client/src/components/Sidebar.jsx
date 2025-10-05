@@ -2,10 +2,40 @@ import React, { useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { assets } from '../assets/assets'
 import moment from 'moment'
+import { chatAPI } from '../utils/api'
 
 const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
-  const { chats, setSelectedChat, theme, setTheme, user, navigate } = useAppContext()
+  const { chats, setSelectedChat, theme, setTheme, user, navigate, logout, fetchUsersChats } = useAppContext()
   const [search, setSearch] = useState('')
+
+  const handleNewChat = async () => {
+    try {
+      const response = await chatAPI.createChat();
+      if (response.success) {
+        fetchUsersChats();
+        setIsMenuOpen(false);
+      }
+    } catch (error) {
+      console.error('Failed to create new chat:', error);
+    }
+  };
+
+  const handleDeleteChat = async (chatId, e) => {
+    e.stopPropagation();
+    try {
+      const response = await chatAPI.deleteChat(chatId);
+      if (response.success) {
+        fetchUsersChats();
+      }
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    setIsMenuOpen(false);
+  };
 
   return (
     <>
@@ -26,9 +56,10 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
 
       {/* New Chat Button */}
       <button
+        onClick={handleNewChat}
         className="flex justify-center items-center w-full py-2 mt-10 
       text-white bg-gradient-to-r from-[#A456F7] to-[#3D81F6] text-sm rounded-md 
-      cursor-pointer"
+      cursor-pointer hover:opacity-90 transition-opacity"
       >
         <span className="mr-2 text-xl">+</span> New Chat
       </button>
@@ -79,8 +110,9 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
 
               {/* Bin Icon (Delete) */}
               <img
+                onClick={(e) => handleDeleteChat(chat._id, e)}
                 src={assets.bin_icon}
-                className="hidden group-hover:block w-4 cursor-pointer not-dark:invert"
+                className="hidden group-hover:block w-4 cursor-pointer not-dark:invert hover:scale-110 transition-transform"
                 alt="Delete"
               />
             </div>
@@ -122,7 +154,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
           <div className={`flex items-center gap-2 p-3 mt-4 border ${theme === 'dark' ? 'border-white/15' : 'border-gray-300'} rounded-md cursor-pointer group`}>
             <img src={assets.user_icon} className='w-7 rounded-full' alt="" />
             <p className={`flex-1 text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-800'} truncate`}>{user ? user.name : 'Login your account'}</p>
-            {user && <img src={assets.logout_icon} className='h-5 cursor-pointer hidden not-dark:invert group-hover:block'/>}
+            {user && <img onClick={handleLogout} src={assets.logout_icon} className='h-5 cursor-pointer hidden not-dark:invert group-hover:block hover:scale-110 transition-transform'/>}
           </div>
 
           <img onClick={()=> setIsMenuOpen(false)} src={assets.close_icon} className='absolute top-3 right-3 w-5 h-5 cursor-pointer md:hidden not-dark:invert' alt="" />
